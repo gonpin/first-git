@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>フラッシュ数字記憶ゲーム</title>
+
+<style>
+/* ===== 全体レイアウト ===== */
+body {
+    margin: 0;
+    height: 100vh;
+    font-family: "Segoe UI", sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+}
+
+/* 中央カード */
+.card {
+    background: white;
+    width: 420px;
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+/* タイトル */
+h1 {
+    margin-top: 0;
+}
+
+/* 大きな表示用（カウントダウン・フラッシュ数字） */
+.big-number {
+    font-size: 8em;
+    font-weight: bold;
+    margin: 20px 0;
+    animation: pop 0.3s ease;
+}
+
+/* 数字が少しポップするアニメーション */
+@keyframes pop {
+    0% { transform: scale(0.8); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* 非表示 */
+.hidden {
+    display: none;
+}
+
+/* セレクト・ボタン共通 */
+select, button {
+    padding: 10px 16px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    margin: 5px;
+}
+
+/* スタートボタン */
+.start-btn {
+    background: #2575fc;
+    color: white;
+}
+
+/* 数字ボタンエリア */
+.number-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+
+/* 数字ボタン */
+.number-btn {
+    font-size: 24px;
+    padding: 15px;
+    border-radius: 12px;
+    background: #f0f0f0;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+/* hover時に浮き上がる */
+.number-btn:hover:not(:disabled) {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+}
+
+/* 押せなくなったボタン */
+.number-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+/* 入力順表示 */
+.sequence-display {
+    margin-top: 10px;
+    min-height: 24px;
+}
+
+/* 結果表示 */
+.result {
+    font-size: 24px;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 15px;
+}
+
+/* 正解 */
+.success {
+    background: #d4f7d4;
+    color: #2e7d32;
+}
+
+/* 不正解 */
+.fail {
+    background: #ffd6d6;
+    color: #c62828;
+}
+
+/* 下部ステータス */
+.stats {
+    margin-top: 15px;
+    font-size: 14px;
+}
+</style>
+</head>
+
+<body>
+<div class="card">
+
+    <h1>🧠 フラッシュ数字記憶</h1>
+
+    <!-- 設定画面 -->
+    <div id="setup">
+        <select id="difficulty">
+            <option value="easy">簡単</option>
+            <option value="normal">普通</option>
+            <option value="hard">難しい</option>
+            <option value="veryhard">超難しい</option>
+        </select>
+        <br>
+        <button class="start-btn" onclick="startGame()">スタート</button>
+    </div>
+
+    <!-- カウントダウン・数字表示 -->
+    <div id="display" class="big-number hidden"></div>
+
+    <!-- ユーザー入力表示 -->
+    <div id="userSequence" class="sequence-display"></div>
+
+    <!-- 数字ボタン -->
+    <div id="numberGrid" class="number-grid hidden"></div>
+
+    <!-- 結果 -->
+    <div id="result" class="result hidden"></div>
+
+    <!-- 再プレイ -->
+    <div id="control" class="hidden">
+        <button onclick="resetGame()">もう一度</button>
+        <button onclick="location.reload()">終了</button>
+    </div>
+
+    <!-- ステータス -->
+    <div class="stats">
+        連続成功: <span id="streak">0</span> /
+        最高記録: <span id="best">0</span> /
+        正解率: <span id="rate">0</span>%
+    </div>
+
+</div>
+
+<script>
+/* ===============================
+   グローバル変数
+================================ */
+
+// 正解の順番
+let correctSequence = [];
+
+// ユーザーの入力順
+let userSequence = [];
+
+// クリック回数管理
+let clickCount = 0;
+
+// 連続成功・最高記録
+let streak = 0;
+let best = 0;
+
+// 総プレイ数・成功数
+let totalPlay = 0;
+let totalSuccess = 0;
+
+/* ===============================
+   ゲーム開始
+================================ */
+function startGame() {
+    document.getElementById("setup").classList.add("hidden");
+    startCountdown(3);
+}
+
+/* ===============================
+   カウントダウン表示
+================================ */
+function startCountdown(count) {
+    const display = document.getElementById("display");
+    display.classList.remove("hidden");
+    display.textContent = count;
+
+    if (count > 1) {
+        setTimeout(() => startCountdown(count - 1), 1000);
+    } else {
+        setTimeout(() => {
+            display.classList.add("hidden");
+            startFlash();
+        }, 1000);
+    }
+}
+
+/* ===============================
+   フラッシュ数字開始
+================================ */
+function startFlash() {
+    const difficulty = document.getElementById("difficulty").value;
+
+    // 難易度設定
+    let settings = {
+        easy:      { count: 3, speed: 1000 },
+        normal:    { count: 5, speed: 700 },
+        hard:      { count: 7, speed: 500 },
+        veryhard:  { count: 9, speed: 400 }
+    };
+
+    // 1〜9の配列をシャッフル
+    let numbers = [1,2,3,4,5,6,7,8,9];
+    numbers.sort(() => Math.random() - 0.5);
+
+    // 必要な個数だけ取得
+    correctSequence = numbers.slice(0, settings[difficulty].count);
+
+    showNumberSequence(correctSequence, settings[difficulty].speed);
+}
+
+/* ===============================
+   数字を順番に表示
+================================ */
+function showNumberSequence(sequence, speed) {
+    let index = 0;
+    const display = document.getElementById("display");
+    display.classList.remove("hidden");
+
+    const interval = setInterval(() => {
+        display.textContent = sequence[index];
+        index++;
+
+        if (index >= sequence.length) {
+            clearInterval(interval);
+            setTimeout(() => {
+                display.classList.add("hidden");
+                showNumberButtons();
+            }, speed);
+        }
+    }, speed);
+}
+
+/* ===============================
+   数字ボタン表示
+================================ */
+function showNumberButtons() {
+    const grid = document.getElementById("numberGrid");
+    grid.innerHTML = "";
+    grid.classList.remove("hidden");
+
+    userSequence = [];
+    clickCount = 0;
+    document.getElementById("userSequence").textContent = "";
+
+    // 1〜9のボタン生成
+    for (let i = 1; i <= 9; i++) {
+        const btn = document.createElement("button");
+        btn.textContent = i;
+        btn.className = "number-btn";
+        btn.onclick = () => selectNumber(i, btn);
+        grid.appendChild(btn);
+    }
+}
+
+/* ===============================
+   数字選択
+================================ */
+function selectNumber(num, button) {
+    userSequence.push(num);
+    button.disabled = true;
+
+    // 入力順を表示
+    document.getElementById("userSequence").textContent =
+        userSequence.join(" → ");
+
+    clickCount++;
+
+    // 必要数クリックしたら判定
+    if (clickCount === correctSequence.length) {
+        submitAnswer();
+    }
+}
+
+/* ===============================
+   判定処理
+================================ */
+function submitAnswer() {
+    totalPlay++;
+
+    const result = document.getElementById("result");
+    result.classList.remove("hidden");
+
+    if (JSON.stringify(correctSequence) === JSON.stringify(userSequence)) {
+        streak++;
+        totalSuccess++;
+        best = Math.max(best, streak);
+
+        result.className = "result success";
+        result.innerHTML = "🎉 正解！<br>正解順: " + correctSequence.join(" → ");
+    } else {
+        streak = 0;
+        result.className = "result fail";
+        result.innerHTML =
+            "❌ 残念！<br>" +
+            "正解: " + correctSequence.join(" → ") + "<br>" +
+            "あなた: " + userSequence.join(" → ");
+    }
+
+    updateStats();
+    document.getElementById("control").classList.remove("hidden");
+}
+
+/* ===============================
+   ステータス更新
+================================ */
+function updateStats() {
+    document.getElementById("streak").textContent = streak;
+    document.getElementById("best").textContent = best;
+    document.getElementById("rate").textContent =
+        Math.round((totalSuccess / totalPlay) * 100);
+}
+
+/* ===============================
+   リセット
+================================ */
+function resetGame() {
+    document.getElementById("setup").classList.remove("hidden");
+    document.getElementById("numberGrid").classList.add("hidden");
+    document.getElementById("result").classList.add("hidden");
+    document.getElementById("control").classList.add("hidden");
+}
+</script>
+</body>
+</html>

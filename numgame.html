@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>フラッシュ数字記憶ゲーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ==========
+       全体レイアウト
+       ========== */
+    :root{
+      --card-width: 840px;
+      --theme-grad-1: #6a11cb; /* 紫 */
+      --theme-grad-2: #2575fc; /* 青 */
+      --ok: #16a34a;          /* 成功（緑） */
+      --ng: #dc2626;          /* 失敗（赤） */
+      --muted: #9ca3af;       /* グレー */
+      --ink: #1f2937;         /* 文字色（濃いめ） */
+      --ink-light: #4b5563;   /* 文字色（薄め） */
+      --border: #e5e7eb;      /* 罫線 */
+      --shadow: 0 8px 24px rgba(0,0,0,0.15);
+      --shadow-soft: 0 4px 12px rgba(0,0,0,0.12);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --accent: #7c3aed;      /* アクセント（紫） */
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans JP, "Hiragino Kaku Gothic ProN", "Meiryo", "Yu Gothic UI", "Yu Gothic", sans-serif;
+      color: var(--ink);
+    }
+
+    /* 背景のグラデーション */
+    body {
+      background: linear-gradient(135deg, var(--theme-grad-1), var(--theme-grad-2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 中央のカード */
+    .card {
+      width: min(95vw, var(--card-width));
+      background: #fff;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px 28px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ヘッダ部分（タイトル + 設定/操作） */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: .02em;
+    }
+
+    .title .badge {
+      font-size: .82rem;
+      color: #fff;
+      background: var(--accent);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    /* 設定（難易度 + スタート） */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    label {
+      font-size: .95rem;
+      color: var(--ink-light);
+    }
+
+    select, button {
+      appearance: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: .95rem;
+      background: #fff;
+      cursor: pointer;
+      transition: transform .06s ease, box-shadow .2s ease, background .2s ease, color .2s ease, opacity .2s ease;
+    }
+
+    select:focus, button:focus {
+      outline: 3px solid rgba(124, 58, 237, .2);
+      border-color: var(--accent);
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+      font-weight: 700;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--border);
+      font-weight: 700;
+    }
+
+    .btn-secondary:hover { box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+    .btn:disabled, .btn-secondary:disabled, select:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* 表示エリア（カウントダウン／フラッシュ数字／結果） */
+    .display {
+      position: relative;
+      min-height: 260px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+      overflow: hidden;
+    }
+
+    .big-text {
+      font-size: clamp(4rem, 10vw, 8rem); /* フラッシュ数字は大きく */
+      font-weight: 800;
+      color: var(--ink);
+      letter-spacing: .03em;
+      user-select: none;
+      line-height: 1;
+      opacity: 0;
+      transform: scale(.9);
+      /* 最初は非表示。JS側でアニメーション用クラスを付け外しして表示 */
+    }
+
+    /* 数字のポップアニメーション（拡大しつつフェードイン） */
+    @keyframes popIn {
+      0%   { transform: scale(.6); opacity: 0; }
+      60%  { transform: scale(1.06); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .pop {
+      animation: popIn .28s ease-out forwards;
+    }
+
+    /* 結果表示（成功/失敗の背景色を切り替え） */
+    .result {
+      position: absolute;
+      inset: 0;
+      display: none; /* 初期は非表示。判定後に表示 */
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      color: #fff;
+    }
+    .result.success { display: flex; background: linear-gradient(180deg, rgba(22,163,74,.96), rgba(22,163,74,.88)); }
+    .result.fail    { display: flex; background: linear-gradient(180deg, rgba(220,38,38,.96), rgba(220,38,38,.88)); }
+
+    .result .result-inner {
+      max-width: 640px;
+    }
+    .result h2 {
+      margin: 0 0 6px 0;
+      font-size: clamp(1.2rem, 3vw, 1.6rem);
+    }
+    .result p {
+      margin: 6px 0;
+      font-size: .98rem;
+      opacity: .98;
+    }
+    .seq {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: rgba(255,255,255,.15);
+      padding: 6px 8px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    /* 入力とボタン領域 */
+    .input-area {
+      display: none; /* 初期は非表示。数字提示後に表示 */
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-label {
+      color: var(--ink-light);
+      font-size: .95rem;
+    }
+
+    .user-seq {
+      min-height: 28px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      background: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      color: var(--ink);
+    }
+
+    /* 3×3 グリッドの数字ボタン */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .num-btn {
+      height: 64px;
+      font-size: 1.2rem;
+      font-weight: 800;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    }
+    .num-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-soft); background: #ffffff; }
+    .num-btn:active { transform: translateY(0); }
+    .num-btn:disabled {
+      background: #f3f4f6;
+      color: var(--muted);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* 下部のステータスバー（連続成功・最高記録・正解率） */
+    .statusbar {
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+      padding-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--ink-light);
+      font-size: .95rem;
+    }
+    .stat-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .stat {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+
+    /* 補助メッセージ */
+    .note {
+      color: var(--ink-light);
+      font-size: .9rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="title">
+    <!-- ヘッダー：タイトルとコントロール -->
+    <div class="header">
+      <div class="title">
+        <h1 id="title">フラッシュ数字記憶ゲーム</h1>
+        <span class="badge">1ファイル / ライブラリ不使用</span>
+      </div>
+      <div class="controls">
+        <label for="difficulty">難易度：</label>
+        <select id="difficulty" aria-label="難易度選択">
+          <option value="easy">簡単（3個 / 表示1.0秒）</option>
+          <option value="normal" selected>普通（5個 / 表示0.7秒）</option>
+          <option value="hard">難しい（7個 / 表示0.5秒）</option>
+          <option value="insane">超難しい（9個 / 表示0.4秒）</option>
+        </select>
+        <button id="startBtn" class="btn" aria-label="ゲーム開始">スタート</button>
+        <button id="retryBtn" class="btn-secondary" disabled aria-label="もう一度">もう一度</button>
+        <button id="resetBtn" class="btn-secondary" aria-label="終了（リセット）">終了</button>
+      </div>
+    </div>
+
+    <!-- 表示領域（カウントダウン／フラッシュ数字／結果） -->
+    <section class="display" aria-live="polite">
+      <!-- カウントダウン/フラッシュ数字 -->
+      <div id="bigText" class="big-text" aria-hidden="true">3</div>
+
+      <!-- 判定結果のオーバーレイ -->
+      <div id="resultOverlay" class="result" aria-live="assertive">
+        <div class="result-inner">
+          <h2 id="resultTitle">🎉 正解！</h2>
+          <p id="resultMessage">お見事！</p>
+          <p><strong>正解の順番：</strong> <span id="resultCorrect" class="seq"></span></p>
+          <p id="resultUserWrap" style="display:none;"><strong>あなたの回答：</strong> <span id="resultUser" class="seq"></span></p>
+          <p id="streakInfo" class="note"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 入力エリア（ユーザーがクリックするボタン） -->
+    <section class="input-area" id="inputArea">
+      <div class="input-label">クリックした順番：</div>
+      <div id="userSeq" class="user-seq" aria-live="polite">（未入力）</div>
+
+      <div class="grid" id="grid">
+        <!-- 1〜9のボタンはJSで生成 -->
+      </div>
+    </section>
+
+    <!-- ステータスバー：常時表示 -->
+    <footer class="statusbar" aria-live="polite">
+      <div class="stat-group">
+        <div class="stat">連続成功：<strong id="streak">0</strong></div>
+        <div class="stat">最高記録：<strong id="best">0</strong></div>
+        <div class="stat">正解率：<strong id="accuracy">0%</strong></div>
+      </div>
+      <div class="note">①スタート → ②カウントダウン → ③数字が順番に表示 → ④同じ順番で下のボタンをクリック</div>
+    </footer>
+  </main>
+
+  <script>
+    /* =========================================================
+       フラッシュ数字記憶ゲーム（Vanilla JS）
+       －－ 初学者向けに日本語コメントを丁寧に記載 －－
+       ========================================================= */
+
+    // ------------------------------------------
+    // 難易度ごとの設定（表示個数と表示時間）
+    // ------------------------------------------
+    const difficultySettings = {
+      // 簡単：3個・1.0秒ごとに表示
+      easy:   { count: 3,  interval: 1000 },
+      // 普通：5個・0.7秒ごとに表示
+      normal: { count: 5,  interval: 700  },
+      // 難しい：7個・0.5秒ごとに表示
+      hard:   { count: 7,  interval: 500  },
+      // 超難しい：9個・0.4秒ごとに表示
+      insane: { count: 9,  interval: 400  },
+    };
+
+    // ------------------------------------------
+    // 参照するDOM要素をまとめて取得
+    // ------------------------------------------
+    const difficultySelect = document.getElementById('difficulty');
+    const startBtn         = document.getElementById('startBtn');
+    const retryBtn         = document.getElementById('retryBtn');
+    const resetBtn         = document.getElementById('resetBtn');
+
+    const displayArea      = document.querySelector('.display');
+    const bigText          = document.getElementById('bigText');
+    const resultOverlay    = document.getElementById('resultOverlay');
+    const resultTitle      = document.getElementById('resultTitle');
+    const resultMessage    = document.getElementById('resultMessage');
+    const resultCorrect    = document.getElementById('resultCorrect');
+    const resultUserWrap   = document.getElementById('resultUserWrap');
+    const resultUser       = document.getElementById('resultUser');
+    const streakInfo       = document.getElementById('streakInfo');
+
+    const inputArea        = document.getElementById('inputArea');
+    const userSeqBox       = document.getElementById('userSeq');
+    const grid             = document.getElementById('grid');
+
+    const streakEl         = document.getElementById('streak');
+    const bestEl           = document.getElementById('best');
+    const accuracyEl       = document.getElementById('accuracy');
+
+    // ------------------------------------------
+    // ゲーム状態を保持する変数（初期値）
+    // ------------------------------------------
+    let correctSequence = [];     // 正解の順番（例：[3,7,2,...]）
+    let userSequence    = [];     // ユーザーの入力順番
+    let isPlaying       = false;  // 数字提示中や回答中に二重開始を防ぐフラグ
+    let showTimerId     = null;   // setInterval のIDを保持（停止用）
+
+    // 統計（画面下部に常時表示）
+    let streak          = 0;      // 連続成功回数
+    let best            = 0;      // 最高記録（最大連続成功）
+    let totalGames      = 0;      // 試行回数
+    let totalCorrect    = 0;      // 正解回数
+
+    // ------------------------------------------
+    // 初期化：1〜9のボタンを3×3グリッドに配置
+    // ------------------------------------------
+    function buildGridButtons() {
+      grid.innerHTML = '';
+      for (let n = 1; n <= 9; n++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'num-btn';
+        btn.textContent = String(n);
+        btn.setAttribute('aria-label', `数字 ${n}`);
+        btn.addEventListener('click', () => selectNumber(n, btn));
+        grid.appendChild(btn);
+      }
+    }
+    buildGridButtons();
+
+    // ------------------------------------------
+    // ゲーム開始：難易度取得 → カウントダウン → 数字提示
+    // ------------------------------------------
+    function startGame() {
+      if (isPlaying) return; // 多重起動防止
+
+      // UIの準備
+      clearResultOverlay();
+      inputArea.style.display = 'none';
+      userSequence = [];
+      updateUserSequenceView();
+
+      // コントロール類の有効/無効切り替え
+      isPlaying = true;
+      startBtn.disabled = true;
+      retryBtn.disabled = true;
+      difficultySelect.disabled = true;
+
+      // 正解の順番を生成
+      const { count } = getCurrentDifficulty();
+      correctSequence = generateSequence(count);
+
+      // 3秒カウントダウン → 数字提示
+      runCountdown(3).then(() => {
+        showNumberSequence();
+      });
+    }
+
+    // ------------------------------------------
+    // 現在選択されている難易度設定を返す
+    // ------------------------------------------
+    function getCurrentDifficulty() {
+      const key = difficultySelect.value;
+      return difficultySettings[key];
+    }
+
+    // ------------------------------------------
+    // 1〜9から重複なしで count 個の数字をランダム取得
+    // （配列シャッフル → 先頭から count 個を切り出す）
+    // ------------------------------------------
+    function generateSequence(count) {
+      const digits = [1,2,3,4,5,6,7,8,9];
+      // フィッシャー–イェーツのシャッフル
+      for (let i = digits.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [digits[i], digits[j]] = [digits[j], digits[i]];
+      }
+      return digits.slice(0, count);
+    }
+
+    // ------------------------------------------
+    // 3,2,1 のカウントダウンを大きく表示（約1秒間隔）
+    // Promise で完了後に then で続きの処理へ
+    // ------------------------------------------
+    function runCountdown(seconds) {
+      return new Promise((resolve) => {
+        let remain = seconds;
+        bigText.textContent = remain;
+        bigText.classList.remove('pop');
+        void bigText.offsetWidth; // リフローしてから
+        bigText.classList.add('pop');
+        bigText.style.opacity = 1;
+
+        const timer = setInterval(() => {
+          remain -= 1;
+          if (remain <= 0) {
+            clearInterval(timer);
+            // 最後に「スタート！」などを表示してもOK。ここでは一瞬空白に。
+            bigText.style.opacity = 0;
+            resolve();
+          } else {
+            bigText.textContent = remain;
+            bigText.classList.remove('pop');
+            void bigText.offsetWidth; // リフロー
+            bigText.classList.add('pop');
+          }
+        }, 1000);
+      });
+    }
+
+    // ------------------------------------------
+    // 数字の提示：設定された間隔で1つずつ表示（setInterval）
+    // 表示が終わったら入力エリアを表示
+    // ------------------------------------------
+    function showNumberSequence() {
+      const { interval } = getCurrentDifficulty();
+
+      let idx = 0;
+      bigText.style.opacity = 1; // 表示エリアを見せる
+      showTimerId = setInterval(() => {
+        if (idx >= correctSequence.length) {
+          // すべて表示し終わったら終了処理
+          clearInterval(showTimerId);
+          showTimerId = null;
+          // 数字エリアは消す
+          bigText.style.opacity = 0;
+          // 入力エリアを表示
+          prepareForAnswer();
+          return;
+        }
+
+        // 現在の数字を大きく表示 + ポップアニメーション
+        const n = correctSequence[idx];
+        bigText.textContent = String(n);
+        bigText.classList.remove('pop');
+        void bigText.offsetWidth; // リフロー
+        bigText.classList.add('pop');
+
+        idx += 1;
+      }, interval);
+    }
+
+    // ------------------------------------------
+    // 回答受付の準備：入力エリア表示＆ボタン有効化
+    // ------------------------------------------
+    function prepareForAnswer() {
+      inputArea.style.display = 'flex';
+      // すべての数字ボタンを有効化
+      Array.from(grid.querySelectorAll('button')).forEach(btn => {
+        btn.disabled = false;
+      });
+      // 再プレイボタンはこの時点で有効化（途中でやり直したい場合向け）
+      retryBtn.disabled = false;
+    }
+
+    // ------------------------------------------
+    // ユーザーが数字ボタンをクリックしたときの処理
+    // - 配列に追加
+    // - ボタンを無効化（再クリック防止）
+    // - 既定の個数に達したら自動判定
+    // ------------------------------------------
+    function selectNumber(n, btnEl) {
+      // 数字表示中はクリックを無視（通常この状態では inputArea が非表示）
+      if (!inputArea.style.display || inputArea.style.display === 'none') return;
+
+      userSequence.push(n);
+      btnEl.disabled = true; // グレーアウト（再クリック防止）
+      updateUserSequenceView();
+
+      if (userSequence.length >= correctSequence.length) {
+        // 必要個数に達したら自動判定
+        submitAnswer();
+      }
+    }
+
+    // ------------------------------------------
+    // ユーザーの入力表示（"1 → 5 → 3" のように表示）
+    // ------------------------------------------
+    function updateUserSequenceView() {
+      if (userSequence.length === 0) {
+        userSeqBox.textContent = '（未入力）';
+      } else {
+        userSeqBox.textContent = userSequence.join(' → ');
+      }
+    }
+
+    // ------------------------------------------
+    // 回答の判定：JSON.stringify で配列を比較
+    // - 正解なら streak +1、最高記録を更新
+    // - 不正解なら streak を 0 にリセット
+    // - 正解率や総トライ数を更新し、結果を表示
+    // ------------------------------------------
+    function submitAnswer() {
+      // 回答受付終了：入力ボタンは一旦無効化
+      Array.from(grid.querySelectorAll('button')).forEach(btn => btn.disabled = true);
+      inputArea.style.display = 'none';
+
+      totalGames += 1;
+
+      const isCorrect = JSON.stringify(userSequence) === JSON.stringify(correctSequence);
+      if (isCorrect) {
+        streak += 1;
+        totalCorrect += 1;
+        if (streak > best) best = streak;
+
+        showResult(true, {
+          correct: correctSequence,
+          user: userSequence,
+        });
+      } else {
+        streak = 0;
+        showResult(false, {
+          correct: correctSequence,
+          user: userSequence,
+        });
+      }
+
+      updateStats();
+      // 1ラウンド終了：開始ボタンを再び有効化
+      isPlaying = false;
+      startBtn.disabled = false;
+      difficultySelect.disabled = false;
+      retryBtn.disabled = false;
+    }
+
+    // ------------------------------------------
+    // 結果の表示（成功/失敗）
+    // - 背景色の切り替え
+    // - 正解の順番、ユーザーの回答を提示
+    // - 連続成功情報もあわせて表示
+    // ------------------------------------------
+    function showResult(success, { correct, user }) {
+      resultOverlay.classList.remove('success', 'fail');
+
+      if (success) {
+        resultOverlay.classList.add('success');
+        resultTitle.textContent = '🎉 正解！';
+        resultMessage.textContent = 'お見事！完璧に記憶できました。';
+        resultUserWrap.style.display = 'none'; // 正解時はユーザー回答の表示は省略してもOK
+      } else {
+        resultOverlay.classList.add('fail');
+        resultTitle.textContent = '❌ 残念！';
+        resultMessage.textContent = '順番が違いました。もう一度チャレンジしましょう。';
+        resultUserWrap.style.display = 'block';
+      }
+
+      resultCorrect.textContent = correct.join(' → ');
+      resultUser.textContent = user.join(' → ');
+      streakInfo.textContent = `現在の連続成功：${streak} ／ 最高記録：${best}`;
+
+      resultOverlay.style.display = 'flex';
+    }
+
+    // ------------------------------------------
+    // 結果オーバーレイを隠す（新しいゲーム前など）
+    // ------------------------------------------
+    function clearResultOverlay() {
+      resultOverlay.style.display = 'none';
+      resultOverlay.classList.remove('success', 'fail');
+    }
+
+    // ------------------------------------------
+    // 下部ステータス（連続成功・最高記録・正解率）を更新
+    // ------------------------------------------
+    function updateStats() {
+      streakEl.textContent = String(streak);
+      bestEl.textContent   = String(best);
+      const accuracy = totalGames === 0 ? 0 : Math.round((totalCorrect / totalGames) * 100);
+      accuracyEl.textContent = `${accuracy}%`;
+    }
+
+    // ------------------------------------------
+    // 「もう一度」ボタン：同じ難易度で即リトライ
+    // ------------------------------------------
+    function retryGame() {
+      if (isPlaying) return; // 表示中は不可
+      startGame();
+    }
+
+    // ------------------------------------------
+    // 「終了（リセット）」ボタン：完全リセット
+    // - 統計もリセット
+    // - 画面状態を初期化
+    // ------------------------------------------
+    function resetGame() {
+      if (showTimerId) {
+        clearInterval(showTimerId);
+        showTimerId = null;
+      }
+      isPlaying = false;
+
+      // 状態クリア
+      correctSequence = [];
+      userSequence = [];
+
+      // UI初期化
+      bigText.style.opacity = 0;
+      clearResultOverlay();
+      inputArea.style.display = 'none';
+      Array.from(grid.querySelectorAll('button')).forEach(btn => btn.disabled = false);
+      updateUserSequenceView();
+
+      // コントロール類
+      startBtn.disabled = false;
+      retryBtn.disabled = true; // まだゲームしていないので無効化
+      difficultySelect.disabled = false;
+
+      // 統計リセット
+      streak = 0;
+      best = 0;
+      totalGames = 0;
+      totalCorrect = 0;
+      updateStats();
+    }
+
+    // ------------------------------------------
+    // イベント設定
+    // ------------------------------------------
+    startBtn.addEventListener('click', startGame);
+    retryBtn.addEventListener('click', retryGame);
+    resetBtn.addEventListener('click', resetGame);
+
+    // 初期ステータス反映
+    updateStats();
+  </script>
+</body>
+</html>

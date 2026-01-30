@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>フラッシュ数字記憶ゲーム</title>
+
+<style>
+body {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+#progress {
+  font-size: 22px;
+  color: #555;
+  margin-top: 10px;
+}
+
+#display {
+  font-size: 90px;
+  margin: 10px;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+/* 数字フラッシュ用 */
+.flash {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.keypad button {
+  width: 60px;
+  height: 60px;
+  font-size: 24px;
+  margin: 5px;
+}
+
+.hidden {
+  display: none;
+}
+
+.correct { color: green; }
+.wrong { color: red; }
+
+#result {
+  font-size: 36px;
+  margin-top: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>フラッシュ数字記憶ゲーム</h1>
+
+<div>
+  連続正解回数：<span id="combo">0</span>
+</div>
+
+<br>
+
+<select id="difficulty">
+  <option value="easy">低</option>
+  <option value="normal">中</option>
+  <option value="hard">高</option>
+</select>
+
+<br><br>
+
+<button onclick="startGame()">スタート</button>
+
+<div id="progress"></div>
+<div id="display"></div>
+
+<!-- 入力エリア -->
+<div id="inputArea" class="hidden">
+  <div class="keypad">
+    <button onclick="inputNumber(1)">1</button>
+    <button onclick="inputNumber(2)">2</button>
+    <button onclick="inputNumber(3)">3</button><br>
+    <button onclick="inputNumber(4)">4</button>
+    <button onclick="inputNumber(5)">5</button>
+    <button onclick="inputNumber(6)">6</button><br>
+    <button onclick="inputNumber(7)">7</button>
+    <button onclick="inputNumber(8)">8</button>
+    <button onclick="inputNumber(9)">9</button>
+  </div>
+  <br>
+  <button onclick="clearInput()">取り消し</button>
+</div>
+
+<div id="result"></div>
+
+<br>
+
+<button id="retryBtn" class="hidden" onclick="retry()">もう一度</button>
+<button id="endBtn" class="hidden" onclick="endGame()">終了</button>
+
+<script>
+let answer = [];
+let userInput = [];
+let combo = 0;
+
+const display = document.getElementById("display");
+const inputArea = document.getElementById("inputArea");
+const result = document.getElementById("result");
+const comboSpan = document.getElementById("combo");
+const progress = document.getElementById("progress");
+
+const timeTable = {
+  easy: 1000,
+  normal: 700,
+  hard: 500
+};
+
+// ゲーム開始
+function startGame() {
+  answer = [];
+  userInput = [];
+  result.innerHTML = "";
+  progress.textContent = "";
+  inputArea.classList.add("hidden");
+  display.textContent = "3";
+
+  let count = 3;
+  const countdown = setInterval(() => {
+    count--;
+    display.textContent = count > 0 ? count : "";
+    if (count === 0) {
+      clearInterval(countdown);
+      showNumbers();
+    }
+  }, 1000);
+}
+
+// 数字表示（数字のみフラッシュ）
+function showNumbers() {
+  const diff = document.getElementById("difficulty").value;
+  const speed = timeTable[diff];
+
+  answer = [];
+  for (let i = 0; i < 5; i++) {
+    answer.push(Math.floor(Math.random() * 9) + 1);
+  }
+
+  let index = 0;
+
+  const timer = setInterval(() => {
+    progress.textContent = `数字 ${index + 1} / 5`;
+
+    // フラッシュ開始（一旦消す）
+    display.classList.add("flash");
+
+    setTimeout(() => {
+      display.textContent = answer[index];
+      display.classList.remove("flash");
+    }, 100);
+
+    index++;
+
+    if (index === answer.length) {
+      clearInterval(timer);
+      setTimeout(() => {
+        display.textContent = "";
+        progress.textContent = "";
+        inputArea.classList.remove("hidden");
+      }, speed);
+    }
+  }, speed);
+}
+
+// 入力
+function inputNumber(num) {
+  if (userInput.length >= 5) return;
+  userInput.push(num);
+
+  if (userInput.length === 5) {
+    judge();
+  }
+}
+
+// 入力取り消し
+function clearInput() {
+  userInput = [];
+}
+
+// 判定
+function judge() {
+  inputArea.classList.add("hidden");
+
+  let html = "";
+  let isCorrect = true;
+
+  answer.forEach((num, i) => {
+    if (num === userInput[i]) {
+      html += `<span class="correct">○${num}</span> `;
+    } else {
+      html += `<span class="wrong">×${num}</span> `;
+      isCorrect = false;
+    }
+  });
+
+  if (isCorrect) {
+    combo++;
+    result.innerHTML = "🎉 正解！ 🎉<br>" + html;
+  } else {
+    combo = 0;
+    result.innerHTML = "💥 不正解 💥<br>" + html;
+  }
+
+  comboSpan.textContent = combo;
+  document.getElementById("retryBtn").classList.remove("hidden");
+  document.getElementById("endBtn").classList.remove("hidden");
+}
+
+// 再挑戦
+function retry() {
+  document.getElementById("retryBtn").classList.add("hidden");
+  document.getElementById("endBtn").classList.add("hidden");
+  startGame();
+}
+
+// 終了
+function endGame() {
+  display.textContent = "";
+  progress.textContent = "";
+  result.innerHTML = "";
+  inputArea.classList.add("hidden");
+  document.getElementById("retryBtn").classList.add("hidden");
+  document.getElementById("endBtn").classList.add("hidden");
+}
+</script>
+
+</body>
+</html>

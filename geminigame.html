@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>フラッシュ数字記憶ゲーム</title>
+    <style>
+        /* --- デザイン設定 (CSS) --- */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            /* 背景：紫〜青系のグラデーション */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* 中央のカードスタイル */
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            text-align: center;
+            width: 450px;
+            min-height: 550px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        h1 { color: #333; margin-top: 0; }
+
+        /* 数字表示エリア (フラッシュ・カウントダウン) */
+        #display-area {
+            font-size: 8em;
+            font-weight: bold;
+            height: 1.5em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #444;
+            margin: 20px 0;
+        }
+
+        /* 数字が出る時のアニメーション */
+        .pop-animation {
+            animation: pop 0.3s ease-out;
+        }
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 3x3のグリッドボタン */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px auto;
+            max-width: 250px;
+        }
+
+        .num-btn {
+            width: 70px;
+            height: 70px;
+            font-size: 1.5rem;
+            border: none;
+            border-radius: 10px;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 0 #ccc;
+        }
+
+        .num-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 0 #ccc;
+            background-color: #e0e0e0;
+        }
+
+        .num-btn:active:not(:disabled) {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #ccc;
+        }
+
+        /* ボタン無効化時 */
+        .num-btn:disabled {
+            background-color: #ddd;
+            color: #aaa;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* ユーザーが入力した履歴 */
+        #input-history {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 10px;
+            height: 1.5em;
+        }
+
+        /* 結果表示の色 */
+        .success { background-color: #d4edda; color: #155724 !important; border-radius: 10px; padding: 10px; }
+        .failure { background-color: #f8d7da; color: #721c24 !important; border-radius: 10px; padding: 10px; }
+
+        /* 下部のスコアエリア */
+        .stats {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #555;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+
+        /* 操作用ボタン */
+        .control-btn {
+            padding: 10px 25px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .control-btn:hover { opacity: 0.9; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="setup-screen">
+        <h1>フラッシュ数字</h1>
+        <p>表示される数字の順番を覚えてください！</p>
+        <div style="margin: 20px 0;">
+            難易度：
+            <select id="difficulty-select">
+                <option value="easy">簡単 (3個)</option>
+                <option value="normal" selected>普通 (5個)</option>
+                <option value="hard">難しい (7個)</option>
+                <option value="extreme">超難しい (9個)</option>
+            </select>
+        </div>
+        <button class="control-btn" onclick="startGame()">ゲームスタート</button>
+    </div>
+
+    <div id="game-screen" class="hidden">
+        <div id="display-area"></div>
+        <div id="input-history"></div>
+        
+        <div class="grid-container" id="button-grid">
+            </div>
+
+        <div id="result-area"></div>
+        
+        <div id="action-buttons" class="hidden">
+            <button class="control-btn" onclick="startGame()">もう一度</button>
+            <button class="control-btn" style="background-color: #999;" onclick="resetGame()">終了</button>
+        </div>
+    </div>
+
+    <div class="stats">
+        連続成功: <span id="current-streak">0</span>回 | 
+        最高記録: <span id="best-streak">0</span>回 | 
+        正解率: <span id="win-rate">0</span>%
+    </div>
+</div>
+
+<script>
+    /* --- 状態管理用変数 --- */
+    let correctSequence = []; // 正解の順番
+    let userSequence = [];    // ユーザーがクリックした順番
+    let currentStreak = 0;    // 現在の連続成功数
+    let maxStreak = 0;        // 最高記録
+    let totalGames = 0;       // 総プレイ回数
+    let totalWins = 0;        // 総成功回数
+
+    // 難易度設定データ
+    const difficultySettings = {
+        easy: { count: 3, interval: 1000 },
+        normal: { count: 5, interval: 700 },
+        hard: { count: 7, interval: 500 },
+        extreme: { count: 9, interval: 400 }
+    };
+
+    /**
+     * ゲーム開始処理
+     */
+    function startGame() {
+        // 画面切り替え
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('action-buttons').classList.add('hidden');
+        document.getElementById('result-area').innerHTML = "";
+        document.getElementById('input-history').innerText = "";
+        
+        // グリッドを隠してリセット
+        document.getElementById('button-grid').innerHTML = "";
+        
+        // 難易度取得
+        const diffKey = document.getElementById('difficulty-select').value;
+        const config = difficultySettings[diffKey];
+
+        // 正解の数字列を作成 (1〜9からランダムに重複なしで抽出)
+        generateSequence(config.count);
+
+        // カウントダウン開始
+        startCountdown(() => {
+            showNumberSequence(config.interval);
+        });
+    }
+
+    /**
+     * ランダムな数字の配列を作る
+     */
+    function generateSequence(count) {
+        const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        // 配列をランダムに並び替えてから必要な数だけ取り出す
+        const shuffled = numbers.sort(() => Math.random() - 0.5);
+        correctSequence = shuffled.slice(0, count);
+        userSequence = [];
+    }
+
+    /**
+     * カウントダウン表示 (3, 2, 1)
+     */
+    function startCountdown(callback) {
+        const display = document.getElementById('display-area');
+        let count = 3;
+        display.innerText = count;
+
+        const timer = setInterval(() => {
+            count--;
+            if (count > 0) {
+                display.innerText = count;
+            } else {
+                clearInterval(timer);
+                display.innerText = "";
+                callback(); // カウントダウン終了後に次の処理へ
+            }
+        }, 1000);
+    }
+
+    /**
+     * 数字を順番にフラッシュ表示
+     */
+    function showNumberSequence(interval) {
+        const display = document.getElementById('display-area');
+        let index = 0;
+
+        const timer = setInterval(() => {
+            // 数字を表示
+            display.innerText = correctSequence[index];
+            display.classList.remove('pop-animation');
+            void display.offsetWidth; // アニメーション再発火のためのハック
+            display.classList.add('pop-animation');
+
+            index++;
+
+            // 全て表示し終わったら
+            if (index > correctSequence.length) {
+                clearInterval(timer);
+                display.innerText = "？";
+                createButtons(); // 入力用ボタンを表示
+            }
+        }, interval);
+    }
+
+    /**
+     * 入力用ボタン(3x3)を作成
+     */
+    function createButtons() {
+        const grid = document.getElementById('button-grid');
+        grid.innerHTML = ""; // 初期化
+
+        for (let i = 1; i <= 9; i++) {
+            const btn = document.createElement('button');
+            btn.className = 'num-btn';
+            btn.innerText = i;
+            btn.onclick = () => selectNumber(i, btn);
+            grid.appendChild(btn);
+        }
+    }
+
+    /**
+     * 数字ボタンをクリックした時の処理
+     */
+    function selectNumber(num, btn) {
+        userSequence.push(num);
+        btn.disabled = true; // 二度押し防止
+
+        // 入力履歴を表示
+        document.getElementById('input-history').innerText = userSequence.join(' → ');
+
+        // 必要な個数に達したら判定
+        if (userSequence.length === correctSequence.length) {
+            submitAnswer();
+        }
+    }
+
+    /**
+     * 正誤判定
+     */
+    function submitAnswer() {
+        totalGames++;
+        const resultArea = document.getElementById('result-area');
+        const display = document.getElementById('display-area');
+        
+        // 配列の中身を比較
+        const isCorrect = JSON.stringify(correctSequence) === JSON.stringify(userSequence);
+
+        if (isCorrect) {
+            currentStreak++;
+            totalWins++;
+            if (currentStreak > maxStreak) maxStreak = currentStreak;
+            
+            display.innerText = "🎉";
+            resultArea.innerHTML = `<div class="success"><h3>正解！</h3>正解の順番: ${correctSequence.join(', ')}</div>`;
+        } else {
+            currentStreak = 0;
+            display.innerText = "❌";
+            resultArea.innerHTML = `<div class="failure"><h3>残念！</h3>正解: ${correctSequence.join(', ')}<br>あなたの回答: ${userSequence.join(', ')}</div>`;
+        }
+
+        // スコア更新
+        updateStats();
+
+        // 操作ボタン表示
+        document.getElementById('action-buttons').classList.remove('hidden');
+    }
+
+    /**
+     * スコア表示の更新
+     */
+    function updateStats() {
+        document.getElementById('current-streak').innerText = currentStreak;
+        document.getElementById('best-streak').innerText = maxStreak;
+        const rate = totalGames === 0 ? 0 : Math.round((totalWins / totalGames) * 100);
+        document.getElementById('win-rate').innerText = rate;
+    }
+
+    /**
+     * 最初の画面に戻る
+     */
+    function resetGame() {
+        document.getElementById('setup-screen').classList.remove('hidden');
+        document.getElementById('game-screen').classList.add('hidden');
+    }
+</script>
+
+</body>
+</html>
