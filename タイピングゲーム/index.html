@@ -92,10 +92,10 @@
     <div id="setup-screen">
         <label for="difficulty">難易度選択：</label>
         <select id="difficulty">
-            <option value="easy">簡単 (5文字/20秒)</option>
-            <option value="normal" selected>普通 (10文字/30秒)</option>
-            <option value="hard">難しい (15文字/30秒)</option>
-            <option value="extra">激ムズ (20文字/30秒)</option>
+            <option value="easy">簡単 (5文字/10秒)</option>
+            <option value="normal" selected>普通 (10文字/20秒)</option>
+            <option value="hard">難しい (15文字/20秒)</option>
+            <option value="extra">激ムズ (20文字/20秒)</option>
         </select>
         <br>
         <button id="start-btn">ゲーム開始</button>
@@ -204,7 +204,7 @@
         currentTarget = wordList[Math.floor(Math.random() * wordList.length)];
         
         // 制限時間の設定
-        timeLeft = (diff === 'easy') ? 20 : 30;
+        timeLeft = (diff === 'easy') ? 10 : 20;
         timerText.textContent = timeLeft;
 
         // 画面にお題を表示
@@ -212,6 +212,7 @@
         judgmentDisplay.textContent = "";
         
         isGameActive = true;
+        startTimer(); // スタートボタン押下時にタイマー開始
     }
 
     // 【タイマー開始処理】
@@ -231,11 +232,6 @@
     // 【入力チェック処理】
     userInput.addEventListener('input', () => {
         if (!isGameActive) return;
-        
-        // 最初の1文字が入力されたらタイマー始動
-        if (userInput.value.length === 1) {
-            startTimer();
-        }
 
         const userVal = userInput.value;
         let judgmentHTML = "";
